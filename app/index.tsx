@@ -22,7 +22,7 @@ export default function RoleSelect() {
         <TouchableOpacity style={styles.card} onPress={() => router.push('/washer/login')}>
           <Text style={styles.cardIcon}>👕</Text>
           <View>
-            <Text style={styles.cardTitle}>Service Provider</Text>
+            <Text style={styles.cardTitle}>Washer</Text>
             <Text style={styles.cardSub}>Wash, iron & manage orders</Text>
           </View>
         </TouchableOpacity>
