@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
+import { navigate } from 'expo-router/build/global-state/routing';
 
 const TEAL = '#1A6B5A';
 const TEAL_LIGHT = '#E8F4F1';
@@ -21,32 +22,7 @@ export default function DriverLogin() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!mobile || !password) {
-      Alert.alert('Error', 'Mobile aur password dono required hain');
-      return;
-    }
-    try {
-      setLoading(true);
-      const res = await fetch(`${API_URL}/api/riders/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mobile, password }),
-      });
-      const data = await res.json();
-      console.log('[RiderLogin]', data);
-
-      if (data.success) {
-        await AsyncStorage.setItem('token', data.token);
-        await AsyncStorage.setItem('rider', JSON.stringify(data.rider));
-        router.replace('/driver/home');
-      } else {
-        Alert.alert('Error', data.message ?? 'Login failed');
-      }
-    } catch (err) {
-      Alert.alert('Error', 'Server se connect nahi ho paya');
-    } finally {
-      setLoading(false);
-    }
+   navigate('driver/dashboard')
   };
 
   return (

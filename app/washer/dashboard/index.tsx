@@ -1,149 +1,136 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useState } from 'react';
+import Rentals from '../rentals/rental';
 
 const STATS = [
-  { value: '3', label: 'Total' },
-  { value: '2', label: 'Active' },
-  { value: '1', label: 'Rented' },
+  { icon: 'time-outline', value: '6', label: 'Pending' },
+  { icon: 'flame-outline', value: '4', label: 'In Process' },
+  { icon: 'checkmark-circle-outline', value: '12', label: 'Completed' },
+  { icon: 'cash-outline', value: '₹8.5K', label: 'Revenue' },
 ];
-
-const FILTER_TABS = ['All', 'Active', 'Rented', 'Inactive'];
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  active: { bg: '#E8F7F3', text: '#0F6E56' },
-  rented: { bg: '#EEF2FF', text: '#4338CA' },
-  inactive: { bg: '#F1F5F9', text: '#475569' },
+  Washing:   { bg: '#E8F7F3', text: '#0F6E56' },
+  Pending:   { bg: '#FFF4E5', text: '#B45309' },
+  Ironing:   { bg: '#EEF2FF', text: '#4338CA' },
+  Completed: { bg: '#F1F5F9', text: '#475569' },
 };
 
-const ITEMS = [
-  {
-    id: '1', emoji: '👘', name: 'Designer Sherwani', category: 'Ethnic',
-    price: '₹1200/day', deposit: '₹2000', sizes: ['S', 'M', 'L', 'XL'],
-    rating: 4.8, status: 'active', canDeactivate: true,
-  },
-  {
-    id: '2', emoji: '👗', name: 'Silk Saree', category: 'Ethnic',
-    price: '₹800/day', deposit: '₹1500', sizes: ['Free'],
-    rating: 4.9, status: 'rented', canDeactivate: false,
-  },
-  {
-    id: '3', emoji: '🤵', name: 'Tuxedo Suit', category: 'Formal',
-    price: '₹1500/day', deposit: '₹3000', sizes: ['M', 'L', 'XL'],
-    rating: 4.7, status: 'active', canDeactivate: true,
-  },
+const ORDERS = [
+  { id: '#KR-2847', items: '8 items • Wash + Iron', status: 'Washing', activeTab: 'Washing' },
+  { id: '#KR-2848', items: '5 items • Dry Clean',   status: 'Pending', activeTab: 'Washing' },
+  { id: '#KR-2849', items: '12 items • Iron',        status: 'Ironing', activeTab: 'Ironing' },
 ];
 
-export default function Rentals() {
+const TABS = ['Washing', 'Ironing', 'Completed'];
+
+type ActiveTab = 'earnings' | 'rentals';
+
+export default function ProviderDashboard() {
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<ActiveTab>('earnings');
+
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Manage clothes for rent</Text>
-        <View style={styles.notifDot}>
-          <Ionicons name="notifications-outline" size={20} color="#fff" />
-        </View>
-      </View>
-
-      {/* Stats */}
-      <View style={styles.statsRow}>
-        {STATS.map((s) => (
-          <View key={s.label} style={styles.statBox}>
-            <Text style={styles.statValue}>{s.value}</Text>
-            <Text style={styles.statLabel}>{s.label}</Text>
-          </View>
-        ))}
-      </View>
-
-      {/* Filter Tabs */}
-      <View style={styles.filterRow}>
-        {FILTER_TABS.map((tab, i) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.filterTab, i === 0 && styles.filterTabActive]}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.filterText, i === 0 && styles.filterTextActive]}>{tab}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <ScrollView
-        style={styles.scrollFlex}
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-      >
-        {ITEMS.map((item) => {
-          const badge = STATUS_COLORS[item.status];
-          return (
-            <View key={item.id} style={styles.card}>
-              {/* Top Row */}
-              <View style={styles.cardTop}>
-                <View style={styles.itemEmoji}>
-                  <Text style={{ fontSize: 28 }}>{item.emoji}</Text>
-                </View>
-                <View style={styles.itemInfo}>
-                  <View style={styles.itemNameRow}>
-                    <Text style={styles.itemName}>{item.name}</Text>
-                    <View style={[styles.badge, { backgroundColor: badge.bg }]}>
-                      <Text style={[styles.badgeText, { color: badge.text }]}>{item.status}</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.itemCategory}>{item.category}</Text>
-                  <View style={styles.priceRow}>
-                    <Text style={styles.itemPrice}>{item.price}</Text>
-                    <Text style={styles.itemDeposit}>  Deposit: {item.deposit}</Text>
-                  </View>
-                  <View style={styles.sizesRow}>
-                    {item.sizes.map((sz) => (
-                      <View key={sz} style={styles.sizeBox}>
-                        <Text style={styles.sizeText}>{sz}</Text>
-                      </View>
-                    ))}
-                    <View style={styles.ratingBox}>
-                      <Ionicons name="star" size={12} color="#F59E0B" />
-                      <Text style={styles.ratingText}>{item.rating}</Text>
-                    </View>
-                  </View>
-                </View>
+      {/* Content area — flex: 1 so it fills space above bottom bar */}
+      <View style={styles.content}>
+        {activeTab === 'earnings' ? (
+          <>
+            {/* Header */}
+            <View style={styles.header}>
+              <View>
+                <Text style={styles.headerSub}>Provider Dashboard</Text>
+                <Text style={styles.headerTitle}>KORA Laundry Hub</Text>
               </View>
-
-              {/* Divider */}
-              <View style={styles.divider} />
-
-              {/* Actions */}
-              <View style={styles.actions}>
-                <TouchableOpacity style={styles.actionBtn}>
-                  <Ionicons name="create-outline" size={15} color="#555" />
-                  <Text style={styles.actionText}>Edit</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.actionBtn}>
-                  <Ionicons
-                    name={item.canDeactivate ? 'eye-off-outline' : 'eye-outline'}
-                    size={15}
-                    color="#555"
-                  />
-                  <Text style={styles.actionText}>
-                    {item.canDeactivate ? 'Deactivate' : 'Activate'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.deleteBtn}>
-                  <Ionicons name="trash-outline" size={15} color="#DC2626" />
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity onPress={() => router.replace('/')}>
+                <Text style={styles.switchRole}>Switch Role</Text>
+              </TouchableOpacity>
             </View>
-          );
-        })}
-      </ScrollView>
 
-      {/* Add Button */}
-      <View style={styles.addWrap}>
-        <TouchableOpacity style={styles.addBtn} activeOpacity={0.85}>
-          <Ionicons name="add" size={20} color="#fff" />
-          <Text style={styles.addText}>Add New Rental Item</Text>
+            <ScrollView
+              style={styles.scrollFlex}
+              contentContainerStyle={styles.scroll}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.statsGrid}>
+                {STATS.map((s) => (
+                  <View key={s.label} style={styles.statCard}>
+                    <Ionicons name={s.icon as any} size={22} color="#0F9B72" />
+                    <Text style={styles.statValue}>{s.value}</Text>
+                    <Text style={styles.statLabel}>{s.label}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <Text style={styles.sectionTitle}>Incoming Orders</Text>
+
+              {ORDERS.map((order) => {
+                const badge = STATUS_COLORS[order.status] ?? STATUS_COLORS.Completed;
+                return (
+                  <View key={order.id} style={styles.orderCard}>
+                    <View style={styles.orderHeader}>
+                      <Text style={styles.orderId}>{order.id}</Text>
+                      <View style={[styles.badge, { backgroundColor: badge.bg }]}>
+                        <Text style={[styles.badgeText, { color: badge.text }]}>{order.status}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.orderMeta}>{order.items}</Text>
+                    <View style={styles.tabs}>
+                      {TABS.map((tab) => {
+                        const active = tab === order.activeTab;
+                        return (
+                          <TouchableOpacity
+                            key={tab}
+                            activeOpacity={0.7}
+                            style={[styles.tab, active && styles.tabActive]}
+                          >
+                            <Text style={[styles.tabText, active && styles.tabTextActive]}>{tab}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </>
+        ) : (
+          <Rentals />
+        )}
+      </View>
+
+      {/* Bottom Bar — always at bottom */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity
+          style={[styles.bottomBtn, activeTab === 'earnings' && styles.bottomBtnFilled]}
+          onPress={() => setActiveTab('earnings')}
+        >
+          <Ionicons
+            name="bar-chart-outline"
+            size={18}
+            color={activeTab === 'earnings' ? '#FFFFFF' : '#1A4A4A'}
+          />
+          <Text style={activeTab === 'earnings' ? styles.bottomBtnLabelFilled : styles.bottomBtnLabel}>
+            Earnings
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.bottomBtn, activeTab === 'rentals' && styles.bottomBtnFilled]}
+          onPress={() => setActiveTab('rentals')}
+        >
+          <Ionicons
+            name="shirt-outline"
+            size={18}
+            color={activeTab === 'rentals' ? '#FFFFFF' : '#1A4A4A'}
+          />
+          <Text style={activeTab === 'rentals' ? styles.bottomBtnLabelFilled : styles.bottomBtnLabel}>
+            Rentals
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -154,119 +141,65 @@ export default function Rentals() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F2F2F0' },
 
+  // This is the key fix — flex:1 pushes bottom bar down
+  content: { flex: 1 },
+
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     paddingHorizontal: 20,
     paddingTop: 8,
-    paddingBottom: 12,
+    paddingBottom: 16,
   },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A1A' },
-  notifDot: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: '#1A4A4A',
-    justifyContent: 'center', alignItems: 'center',
-  },
-
-  statsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    gap: 10,
-    marginBottom: 14,
-  },
-  statBox: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: 'center',
-  },
-  statValue: { fontSize: 20, fontWeight: '700', color: '#1A1A1A' },
-  statLabel: { fontSize: 12, color: '#888', marginTop: 2 },
-
-  filterRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    gap: 8,
-    marginBottom: 14,
-  },
-  filterTab: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E5E0',
-  },
-  filterTabActive: { backgroundColor: '#1A4A4A', borderColor: '#1A4A4A' },
-  filterText: { fontSize: 13, color: '#888', fontWeight: '500' },
-  filterTextActive: { color: '#FFFFFF', fontWeight: '600' },
+  headerSub: { fontSize: 12, color: '#888', marginBottom: 2 },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: '#1A1A1A' },
+  switchRole: { fontSize: 13, color: '#0F9B72', fontWeight: '600' },
 
   scrollFlex: { flex: 1 },
   scroll: { paddingHorizontal: 20, paddingBottom: 16 },
 
-  card: {
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 24 },
+  statCard: {
+    flex: 1, minWidth: '45%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
+    borderRadius: 14, padding: 16, gap: 4,
   },
-  cardTop: { flexDirection: 'row', gap: 12 },
-  itemEmoji: {
-    width: 60, height: 60, borderRadius: 12,
-    backgroundColor: '#F5F5F3',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  itemInfo: { flex: 1 },
-  itemNameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  itemName: { fontSize: 15, fontWeight: '700', color: '#1A1A1A', flex: 1 },
-  badge: { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2, marginLeft: 6 },
-  badgeText: { fontSize: 11, fontWeight: '600' },
-  itemCategory: { fontSize: 12, color: '#888', marginTop: 2 },
-  priceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  itemPrice: { fontSize: 13, fontWeight: '700', color: '#1A1A1A' },
-  itemDeposit: { fontSize: 12, color: '#888' },
-  sizesRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' },
-  sizeBox: {
-    borderWidth: 1, borderColor: '#E0E0E0',
-    borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2,
-  },
-  sizeText: { fontSize: 11, color: '#555', fontWeight: '500' },
-  ratingBox: { flexDirection: 'row', alignItems: 'center', gap: 3, marginLeft: 'auto' },
-  ratingText: { fontSize: 12, fontWeight: '600', color: '#1A1A1A' },
+  statValue: { fontSize: 22, fontWeight: '700', color: '#1A1A1A', marginTop: 4 },
+  statLabel: { fontSize: 13, color: '#888' },
 
-  divider: { height: 1, backgroundColor: '#F0F0EE', marginVertical: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A1A', marginBottom: 12 },
 
-  actions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  actionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+  orderCard: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, marginBottom: 12 },
+  orderHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 4,
   },
-  actionText: { fontSize: 13, color: '#555', fontWeight: '500' },
-  deleteBtn: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: '#FEF2F2',
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: '#FECACA',
-  },
+  orderId: { fontSize: 15, fontWeight: '700', color: '#1A1A1A' },
+  badge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
+  badgeText: { fontSize: 12, fontWeight: '600' },
+  orderMeta: { fontSize: 13, color: '#888', marginBottom: 12 },
 
-  addWrap: { padding: 16, borderTopWidth: 1, borderTopColor: '#E5E5E0' },
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#1A4A4A',
-    borderRadius: 14,
-    paddingVertical: 15,
+  tabs: { flexDirection: 'row', gap: 8 },
+  tab: {
+    flex: 1, paddingVertical: 7, borderRadius: 20,
+    borderWidth: 1, borderColor: '#E0E0E0', alignItems: 'center',
   },
-  addText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
+  tabActive: { backgroundColor: '#1A4A4A', borderColor: '#1A4A4A' },
+  tabText: { fontSize: 12, color: '#888', fontWeight: '500' },
+  tabTextActive: { color: '#FFFFFF', fontWeight: '600' },
+
+  bottomBar: {
+    flexDirection: 'row', gap: 12, padding: 16,
+    borderTopWidth: 1, borderTopColor: '#E5E5E0',
+    backgroundColor: '#F2F2F0',
+  },
+  bottomBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', gap: 8, paddingVertical: 14,
+    borderRadius: 14, borderWidth: 1, borderColor: '#1A4A4A',
+  },
+  bottomBtnFilled: { backgroundColor: '#1A4A4A' },
+  bottomBtnLabel: { fontSize: 14, fontWeight: '600', color: '#1A4A4A' },
+  bottomBtnLabelFilled: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
 });
