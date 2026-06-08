@@ -1,16 +1,20 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function DriverHome() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Assigned Pickups</Text>
-      <Text style={styles.text}>Driver pickup and delivery tasks will appear here.</Text>
-    </View>
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.container}>
+        <Text style={styles.title}>Driver Home</Text>
+        <Text style={styles.text}>Assigned orders yahan dikhenge.</Text>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 24, backgroundColor: '#F8FAFC' },
-  title: { fontSize: 24, fontWeight: '700', marginBottom: 8 },
-  text: { color: '#475569', fontSize: 15 },
+  safe: { flex: 1, backgroundColor: '#EFEFEA' },
+  container: { flex: 1, padding: 24, justifyContent: 'center', alignItems: 'center' },
+  title: { fontSize: 24, fontWeight: '700', color: '#1A1A1A' },
+  text: { color: '#666', marginTop: 8 },
 });
