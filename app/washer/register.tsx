@@ -38,7 +38,8 @@ export default function WasherRegister() {
     //     try {
     //       const res = await axios.post(`${API_BASE}/washer/auth/register`, {
     //         name,
-    //         phone: `+91${phone}`,
+    //         phone: phone,
+
     //         password,
     //       });
 
@@ -69,7 +70,8 @@ export default function WasherRegister() {
         try {
             const res = await axios.post(`${API_BASE}/washer/auth/register`, {
                 name,
-                phone: `+91${phone}`,
+                phone: phone,
+
                 password,
             });
 

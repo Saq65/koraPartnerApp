@@ -13,8 +13,8 @@ const SOCKET_URL = 'http://192.168.1.48:5000';
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   pending_sp: { bg: '#FFF4E5', text: '#B45309' },
-  accepted:   { bg: '#E8F7F3', text: '#0F6E56' },
-  rejected:   { bg: '#FEE2E2', text: '#DC2626' },
+  accepted: { bg: '#E8F7F3', text: '#0F6E56' },
+  rejected: { bg: '#FEE2E2', text: '#DC2626' },
 };
 
 type ActiveTab = 'earnings' | 'rentals';
@@ -25,12 +25,28 @@ interface OrderItem {
   quantity: number;
 }
 
+interface PickupAddress {
+  _id: string;
+  address: string;
+  coordinates: { lat: number; lng: number }; // adjust to your actual shape
+}
+
 interface Order {
   _id: string;
   orderNumber: string;
   items: OrderItem[];
   totalAmount: number;
-  pickupAddress: string;
+  pickupAddress: PickupAddress;  // ← was string, now object
+  status: string;
+  createdAt: string;
+  washerStatus?: 'pending' | 'accepted' | 'rejected';
+}
+interface Order {
+  _id: string;
+  orderNumber: string;
+  items: OrderItem[];
+  totalAmount: number;
+  pickupAddress: PickupAddress;
   status: string;
   createdAt: string;
   washerStatus?: 'pending' | 'accepted' | 'rejected';
@@ -63,25 +79,38 @@ export default function WasherDashboard() {
     setupSocket();
     return () => {
       socketRef.current?.disconnect();
+      socketRef.current = null;
     };
   }, []);
 
-  const setupSocket = async () => {
+  const setupSocket = useCallback(async () => {
     const token = await AsyncStorage.getItem('washer_token');
     const washerInfo = await AsyncStorage.getItem('washer_info');
     const washer = washerInfo ? JSON.parse(washerInfo) : null;
 
+    if (!token) {
+      console.log('[Socket] No token, skipping socket setup');
+      return;
+    }
+
     const socket = io(SOCKET_URL, {
       auth: { token },
       transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: 5,
     });
 
     socket.on('connect', () => {
-      console.log('[Socket] Washer connected');
-      if (washer?.id) socket.emit('join_washer_room', { washerId: washer.id });
+      console.log('[Socket] Washer connected:', socket.id);
+      socket.emit('join_washer_room', { washerId: washer?.id });
+    });
+
+    socket.on('connect_error', (err) => {
+      console.log('[Socket] Connection error:', err.message);
     });
 
     socket.on('new_washer_order', (order: Order) => {
+      console.log('[Socket] New order received:', order.orderNumber);
       setOrders(prev => {
         const exists = prev.find(o => o._id === order._id);
         if (exists) return prev;
@@ -89,8 +118,12 @@ export default function WasherDashboard() {
       });
     });
 
+    socket.on('disconnect', (reason) => {
+      console.log('[Socket] Disconnected:', reason);
+    });
+
     socketRef.current = socket;
-  };
+  }, []);
 
   const handleAccept = async (orderId: string) => {
     setActionLoading(orderId);
@@ -198,7 +231,11 @@ export default function WasherDashboard() {
                         </View>
 
                         <Text style={styles.orderMeta}>{totalQty} items • {services}</Text>
-                        <Text style={styles.orderAddr}>📍 {order.pickupAddress}</Text>
+                        <Text style={styles.orderAddr}>
+                          📍 {typeof order.pickupAddress === 'object'
+                            ? (order.pickupAddress as any).address
+                            : order.pickupAddress}
+                        </Text>
                         <Text style={styles.orderAmount}>₹{order.totalAmount}</Text>
 
                         {washerStatus === 'pending' && (

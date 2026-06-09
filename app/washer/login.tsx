@@ -37,7 +37,7 @@ export default function WasherLogin() {
     setLoading(true);
     try {
       const res = await axios.post(`${API_BASE}/washer/auth/login`, {
-        phone: `+91${phone}`,
+        phone: phone,
         password,
       });
 

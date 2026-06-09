@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "koraRiderApp",
-    "slug": "koraRiderApp",
+    "name": "koraPartnerApp",
+    "slug": "koraPartnerApp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
