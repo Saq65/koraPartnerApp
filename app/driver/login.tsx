@@ -6,7 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import { navigate } from 'expo-router/build/global-state/routing';
+import axios from 'axios';
 
 const TEAL = '#1A6B5A';
 const TEAL_LIGHT = '#E8F4F1';
@@ -14,7 +14,7 @@ const GRAY_LIGHT = '#EFEFEA';
 const GRAY_TEXT = '#ABABAB';
 const TEXT_DARK = '#1A1A1A';
 
-const API_URL = 'http://192.168.1.126:5000';
+const API_URL = 'http://192.168.1.48:5000/api';  // ← apna IP
 
 export default function DriverLogin() {
   const [mobile, setMobile] = useState('');
@@ -22,7 +22,48 @@ export default function DriverLogin() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-   navigate('driver/dashboard')
+    if (!mobile || !password) {
+      Alert.alert('Error', 'Mobile aur password dono bharein');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await axios.post(`${API_URL}/riders/auth/login`, {
+        mobile,
+        password,
+      });
+
+      console.log('Rider login response:', res.data);
+
+      const token = res.data.token || res.data.data?.token;
+      const rider = res.data.rider || res.data.data?.rider || res.data.data;
+
+      if (!token) {
+        Alert.alert('Error', 'Token nahi mila — backend response check karo');
+        return;
+      }
+
+      // ── Token save karo ──
+      await AsyncStorage.setItem('rider_token', token);
+      await AsyncStorage.setItem('rider_info', JSON.stringify({
+        id: rider?._id,
+        name: rider?.name,
+        mobile: rider?.mobile,
+      }));
+
+      console.log('Rider token saved:', token);
+      router.replace('/driver/dashboard');
+
+    } catch (err: any) {
+      console.log('Login error:', err?.response?.data);
+      Alert.alert(
+        'Login Failed',
+        err?.response?.data?.message || 'Invalid mobile or password'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -30,7 +71,6 @@ export default function DriverLogin() {
       <StatusBar barStyle="dark-content" backgroundColor={GRAY_LIGHT} />
       <View style={styles.container}>
 
-        {/* Icon */}
         <View style={styles.iconWrap}>
           <Text style={styles.iconText}>🚴</Text>
         </View>
@@ -38,7 +78,6 @@ export default function DriverLogin() {
         <Text style={styles.title}>Driver Login</Text>
         <Text style={styles.subtitle}>KORA Partner App</Text>
 
-        {/* Mobile */}
         <View style={styles.inputWrap}>
           <Text style={styles.inputLabel}>Mobile Number</Text>
           <TextInput
@@ -51,7 +90,6 @@ export default function DriverLogin() {
           />
         </View>
 
-        {/* Password */}
         <View style={styles.inputWrap}>
           <Text style={styles.inputLabel}>Password</Text>
           <TextInput
@@ -64,7 +102,6 @@ export default function DriverLogin() {
           />
         </View>
 
-        {/* Login Button */}
         <TouchableOpacity
           style={styles.loginBtn}
           onPress={handleLogin}
@@ -73,8 +110,7 @@ export default function DriverLogin() {
         >
           {loading
             ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.loginBtnText}>Login</Text>
-          }
+            : <Text style={styles.loginBtnText}>Login</Text>}
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => router.push('/driver/signup')}>
@@ -89,9 +125,7 @@ export default function DriverLogin() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: GRAY_LIGHT },
-  container: {
-    flex: 1, padding: 24, justifyContent: 'center', gap: 16,
-  },
+  container: { flex: 1, padding: 24, justifyContent: 'center', gap: 16 },
   iconWrap: {
     width: 80, height: 80, borderRadius: 40,
     backgroundColor: TEAL_LIGHT, alignItems: 'center',
@@ -114,5 +148,4 @@ const styles = StyleSheet.create({
   },
   loginBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   signupLink: { textAlign: 'center', color: GRAY_TEXT, fontSize: 14, marginTop: 8 },
-
 });

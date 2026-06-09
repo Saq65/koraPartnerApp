@@ -12,12 +12,14 @@ const API_BASE = 'http://192.168.1.48:5000/api';
 const SOCKET_URL = 'http://192.168.1.48:5000';
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  pending_sp: { bg: '#FFF4E5', text: '#B45309' },
-  accepted: { bg: '#E8F7F3', text: '#0F6E56' },
-  rejected: { bg: '#FEE2E2', text: '#DC2626' },
+  pending:                  { bg: '#FFF4E5', text: '#B45309' },
+  accepted:                 { bg: '#E8F7F3', text: '#0F6E56' },
+  rejected:                 { bg: '#FEE2E2', text: '#DC2626' },
+  pickup_rider_requested:   { bg: '#EEF2FF', text: '#4338CA' },
 };
 
 type ActiveTab = 'earnings' | 'rentals';
+type WasherStatus = 'pending' | 'accepted' | 'rejected' | 'pickup_rider_requested';
 
 interface OrderItem {
   subCategoryName: string;
@@ -28,19 +30,9 @@ interface OrderItem {
 interface PickupAddress {
   _id: string;
   address: string;
-  coordinates: { lat: number; lng: number }; // adjust to your actual shape
+  coordinates: { lat: number; lng: number };
 }
 
-interface Order {
-  _id: string;
-  orderNumber: string;
-  items: OrderItem[];
-  totalAmount: number;
-  pickupAddress: PickupAddress;  // ← was string, now object
-  status: string;
-  createdAt: string;
-  washerStatus?: 'pending' | 'accepted' | 'rejected';
-}
 interface Order {
   _id: string;
   orderNumber: string;
@@ -49,7 +41,7 @@ interface Order {
   pickupAddress: PickupAddress;
   status: string;
   createdAt: string;
-  washerStatus?: 'pending' | 'accepted' | 'rejected';
+  washerStatus?: WasherStatus;
 }
 
 export default function WasherDashboard() {
@@ -74,24 +66,12 @@ export default function WasherDashboard() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchOrders();
-    setupSocket();
-    return () => {
-      socketRef.current?.disconnect();
-      socketRef.current = null;
-    };
-  }, []);
-
   const setupSocket = useCallback(async () => {
     const token = await AsyncStorage.getItem('washer_token');
     const washerInfo = await AsyncStorage.getItem('washer_info');
     const washer = washerInfo ? JSON.parse(washerInfo) : null;
 
-    if (!token) {
-      console.log('[Socket] No token, skipping socket setup');
-      return;
-    }
+    if (!token) return;
 
     const socket = io(SOCKET_URL, {
       auth: { token },
@@ -125,6 +105,16 @@ export default function WasherDashboard() {
     socketRef.current = socket;
   }, []);
 
+  useEffect(() => {
+    fetchOrders();
+    setupSocket();
+    return () => {
+      socketRef.current?.disconnect();
+      socketRef.current = null;
+    };
+  }, []);
+
+  // ── Accept ──────────────────────────────────────────────────
   const handleAccept = async (orderId: string) => {
     setActionLoading(orderId);
     try {
@@ -132,7 +122,9 @@ export default function WasherDashboard() {
       await axios.post(`${API_BASE}/washer/orders/${orderId}/accept`, {}, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setOrders(prev => prev.map(o => o._id === orderId ? { ...o, washerStatus: 'accepted' } : o));
+      setOrders(prev => prev.map(o =>
+        o._id === orderId ? { ...o, washerStatus: 'accepted' } : o
+      ));
     } catch (err: any) {
       Alert.alert('Error', err?.response?.data?.message || 'Failed to accept');
     } finally {
@@ -140,6 +132,7 @@ export default function WasherDashboard() {
     }
   };
 
+  // ── Reject ──────────────────────────────────────────────────
   const handleReject = async (orderId: string) => {
     setActionLoading(orderId);
     try {
@@ -155,20 +148,40 @@ export default function WasherDashboard() {
     }
   };
 
+  // ── Request Pickup Rider ────────────────────────────────────
+  const handleRequestPickupRider = async (orderId: string) => {
+    setActionLoading(orderId);
+    try {
+      const token = await AsyncStorage.getItem('washer_token');
+      await axios.post(`${API_BASE}/washer/orders/${orderId}/request-pickup-rider`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setOrders(prev => prev.map(o =>
+        o._id === orderId ? { ...o, washerStatus: 'pickup_rider_requested' } : o
+      ));
+      Alert.alert('Success', 'Pickup rider has been requested!');
+    } catch (err: any) {
+      Alert.alert('Error', err?.response?.data?.message || 'Failed to request pickup rider');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // ── Logout ──────────────────────────────────────────────────
   const handleLogout = async () => {
     await AsyncStorage.removeItem('washer_token');
     await AsyncStorage.removeItem('washer_info');
     router.replace('/washer/login');
   };
 
-  const pendingCount = orders.filter(o => !o.washerStatus || o.washerStatus === 'pending').length;
+  const pendingCount  = orders.filter(o => !o.washerStatus || o.washerStatus === 'pending').length;
   const acceptedCount = orders.filter(o => o.washerStatus === 'accepted').length;
 
   const STATS = [
-    { icon: 'time-outline', value: String(pendingCount), label: 'Pending' },
-    { icon: 'checkmark-circle-outline', value: String(acceptedCount), label: 'Accepted' },
-    { icon: 'cash-outline', value: '₹0', label: 'Revenue' },
-    { icon: 'flame-outline', value: '0', label: 'Completed' },
+    { icon: 'time-outline',             value: String(pendingCount),  label: 'Pending'   },
+    { icon: 'checkmark-circle-outline', value: String(acceptedCount), label: 'Accepted'  },
+    { icon: 'cash-outline',             value: '₹0',                  label: 'Revenue'   },
+    { icon: 'flame-outline',            value: '0',                   label: 'Completed' },
   ];
 
   return (
@@ -189,8 +202,11 @@ export default function WasherDashboard() {
             {loading ? (
               <ActivityIndicator size="large" color="#0F9B72" style={{ marginTop: 40 }} />
             ) : (
-              <ScrollView style={styles.scrollFlex} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-
+              <ScrollView
+                style={styles.scrollFlex}
+                contentContainerStyle={styles.scroll}
+                showsVerticalScrollIndicator={false}
+              >
                 {/* Stats */}
                 <View style={styles.statsGrid}>
                   {STATS.map((s) => (
@@ -214,30 +230,34 @@ export default function WasherDashboard() {
                 ) : (
                   orders.map((order) => {
                     const washerStatus = order.washerStatus || 'pending';
-                    const badge = STATUS_COLORS[washerStatus] ?? STATUS_COLORS.pending_sp;
+                    const badge = STATUS_COLORS[washerStatus] ?? STATUS_COLORS.pending;
                     const isActioning = actionLoading === order._id;
                     const totalQty = order.items.reduce((s, i) => s + i.quantity, 0);
                     const services = [...new Set(order.items.map(i => i.serviceName))].join(' + ');
 
                     return (
                       <View key={order._id} style={styles.orderCard}>
+
+                        {/* Header row */}
                         <View style={styles.orderHeader}>
                           <Text style={styles.orderId}>#{order.orderNumber}</Text>
                           <View style={[styles.badge, { backgroundColor: badge.bg }]}>
                             <Text style={[styles.badgeText, { color: badge.text }]}>
-                              {washerStatus === 'pending' ? 'New' : washerStatus === 'accepted' ? 'Accepted' : 'Rejected'}
+                              {washerStatus === 'pending'                ? 'New'
+                               : washerStatus === 'accepted'             ? 'Accepted'
+                               : washerStatus === 'pickup_rider_requested' ? 'Rider Requested'
+                               : 'Rejected'}
                             </Text>
                           </View>
                         </View>
 
                         <Text style={styles.orderMeta}>{totalQty} items • {services}</Text>
                         <Text style={styles.orderAddr}>
-                          📍 {typeof order.pickupAddress === 'object'
-                            ? (order.pickupAddress as any).address
-                            : order.pickupAddress}
+                          📍 {order.pickupAddress?.address ?? '—'}
                         </Text>
                         <Text style={styles.orderAmount}>₹{order.totalAmount}</Text>
 
+                        {/* ── Pending: Accept / Reject ── */}
                         {washerStatus === 'pending' && (
                           <View style={styles.actionRow}>
                             <TouchableOpacity
@@ -245,17 +265,46 @@ export default function WasherDashboard() {
                               disabled={isActioning}
                               onPress={() => handleReject(order._id)}
                             >
-                              {isActioning ? <ActivityIndicator size="small" color="#DC2626" /> : <Text style={styles.rejectText}>Reject</Text>}
+                              {isActioning
+                                ? <ActivityIndicator size="small" color="#DC2626" />
+                                : <Text style={styles.rejectText}>Reject</Text>}
                             </TouchableOpacity>
                             <TouchableOpacity
                               style={[styles.acceptBtn, isActioning && styles.btnDisabled]}
                               disabled={isActioning}
                               onPress={() => handleAccept(order._id)}
                             >
-                              {isActioning ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.acceptText}>Accept</Text>}
+                              {isActioning
+                                ? <ActivityIndicator size="small" color="#fff" />
+                                : <Text style={styles.acceptText}>Accept</Text>}
                             </TouchableOpacity>
                           </View>
                         )}
+
+                        {/* ── Accepted: Request Pickup Rider ── */}
+                        {washerStatus === 'accepted' && (
+                          <TouchableOpacity
+                            style={[styles.pickupBtn, isActioning && styles.btnDisabled]}
+                            disabled={isActioning}
+                            onPress={() => handleRequestPickupRider(order._id)}
+                          >
+                            {isActioning
+                              ? <ActivityIndicator size="small" color="#fff" />
+                              : <>
+                                  <Ionicons name="bicycle-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
+                                  <Text style={styles.pickupText}>Request Pickup Rider</Text>
+                                </>}
+                          </TouchableOpacity>
+                        )}
+
+                        {/* ── Rider Requested: Waiting state ── */}
+                        {washerStatus === 'pickup_rider_requested' && (
+                          <View style={styles.waitingRow}>
+                            <ActivityIndicator size="small" color="#4338CA" />
+                            <Text style={styles.waitingText}>Waiting for pickup rider...</Text>
+                          </View>
+                        )}
+
                       </View>
                     );
                   })
@@ -321,6 +370,16 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: '#DC2626', alignItems: 'center',
   },
   acceptBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: '#1A4A4A', alignItems: 'center' },
+  pickupBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 11, borderRadius: 10, backgroundColor: '#4338CA', marginTop: 4,
+  },
+  pickupText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
+  waitingRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    justifyContent: 'center', paddingVertical: 10,
+  },
+  waitingText: { color: '#4338CA', fontWeight: '500', fontSize: 13 },
   btnDisabled: { opacity: 0.5 },
   rejectText: { color: '#DC2626', fontWeight: '600' },
   acceptText: { color: '#FFF', fontWeight: '600' },
