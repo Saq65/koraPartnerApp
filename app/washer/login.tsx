@@ -1,23 +1,64 @@
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+// app/washer/login.tsx
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import axios from 'axios';
+
+const API_BASE = 'http://192.168.1.48:5000/api';
 
 export default function WasherLogin() {
   const router = useRouter();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const savePushToken = async (token: string) => {
+    try {
+      if (!Device.isDevice) return;
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') return;
+      const pushToken = (await Notifications.getExpoPushTokenAsync()).data;
+      await axios.patch(
+        `${API_BASE}/washer/auth/push-token`,
+        { expoPushToken: pushToken },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    } catch (err) {
+      console.log('Push token error:', err);
+    }
+  };
+
+  const handleLogin = async () => {
+    setLoading(true);
+    try {
+      const res = await axios.post(`${API_BASE}/washer/auth/login`, {
+        phone: `+91${phone}`,
+        password,
+      });
+
+      const { token, washer } = res.data;
+      await AsyncStorage.setItem('washer_token', token);
+      await AsyncStorage.setItem('washer_info', JSON.stringify(washer));
+      await savePushToken(token);
+
+      router.replace('/washer/dashboard');
+    } catch (err: any) {
+      Alert.alert('Login Failed', err?.response?.data?.message || 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
-          {/* Logo */}
           <View style={styles.logoBox}>
             <Text style={styles.logoText}>«KORA»</Text>
           </View>
@@ -25,7 +66,6 @@ export default function WasherLogin() {
           <Text style={styles.heading}>Welcome back</Text>
           <Text style={styles.sub}>Login to your washer account</Text>
 
-          {/* Card */}
           <View style={styles.card}>
 
             <Text style={styles.label}>Phone Number</Text>
@@ -63,38 +103,23 @@ export default function WasherLogin() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.btn, (!phone || !password) && styles.btnDisabled]}
+              style={[styles.btn, (!phone || !password || loading) && styles.btnDisabled]}
               activeOpacity={0.8}
-              disabled={!phone || !password}
-              onPress={() => router.replace('/washer/dashboard')}
+              disabled={!phone || !password || loading}
+              onPress={handleLogin}
             >
-              <Text style={styles.btnText}>Login</Text>
+              <Text style={styles.btnText}>{loading ? 'Logging in...' : 'Login'}</Text>
             </TouchableOpacity>
 
           </View>
 
-          {/* Divider */}
-          <View style={styles.orRow}>
-            <View style={styles.line} />
-            <Text style={styles.orText}>or continue with</Text>
-            <View style={styles.line} />
-          </View>
-
-          {/* Google */}
-          <TouchableOpacity style={styles.googleBtn} activeOpacity={0.7}>
-            <Text style={styles.googleIcon}>G</Text>
-            <Text style={styles.googleText}>Sign in with Google</Text>
-          </TouchableOpacity>
-
-          {/* Footer */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>Not a partner yet? </Text>
-            <TouchableOpacity>
+            <TouchableOpacity onPress={() => router.replace('/washer/register')}>
               <Text style={styles.footerLink}>Register here</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Switch role */}
           <TouchableOpacity style={styles.switchRow} onPress={() => router.replace('/')}>
             <Text style={styles.switchText}>← Switch Role</Text>
           </TouchableOpacity>
@@ -108,7 +133,6 @@ export default function WasherLogin() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F2F2F0' },
   scroll: { paddingHorizontal: 24, paddingTop: 32, paddingBottom: 40, alignItems: 'center' },
-
   logoBox: {
     width: 72, height: 72, borderRadius: 18,
     backgroundColor: '#1A4A4A',
@@ -116,71 +140,28 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   logoText: { color: '#5DCAA5', fontSize: 14, fontWeight: '700', letterSpacing: 1 },
-
   heading: { fontSize: 24, fontWeight: '700', color: '#1A1A1A', marginBottom: 4 },
   sub: { fontSize: 14, color: '#888', marginBottom: 28 },
-
-  card: {
-    width: '100%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 20,
-  },
-
+  card: { width: '100%', backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, marginBottom: 20 },
   label: { fontSize: 13, fontWeight: '600', color: '#444', marginBottom: 8 },
-
   inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E5E0',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    height: 50,
-    backgroundColor: '#FAFAFA',
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1, borderColor: '#E5E5E0',
+    borderRadius: 12, paddingHorizontal: 14,
+    height: 50, backgroundColor: '#FAFAFA',
   },
   flag: { fontSize: 14, color: '#333', marginRight: 8 },
   divider: { width: 1, height: 20, backgroundColor: '#E0E0E0', marginRight: 10 },
   input: { flex: 1, fontSize: 15, color: '#1A1A1A' },
   toggle: { fontSize: 18, paddingLeft: 8 },
-
   forgotRow: { alignItems: 'flex-end', marginTop: 10, marginBottom: 20 },
   forgot: { fontSize: 13, color: '#0F9B72', fontWeight: '600' },
-
-  btn: {
-    backgroundColor: '#1A4A4A',
-    borderRadius: 14,
-    paddingVertical: 15,
-    alignItems: 'center',
-  },
+  btn: { backgroundColor: '#1A4A4A', borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
   btnDisabled: { backgroundColor: '#B0C4C4' },
   btnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-
-  orRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginBottom: 16 },
-  line: { flex: 1, height: 1, backgroundColor: '#E5E5E0' },
-  orText: { fontSize: 12, color: '#AAA', marginHorizontal: 12 },
-
-  googleBtn: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    borderWidth: 1,
-    borderColor: '#E5E5E0',
-    borderRadius: 14,
-    paddingVertical: 14,
-    backgroundColor: '#FFFFFF',
-    marginBottom: 28,
-  },
-  googleIcon: { fontSize: 18, fontWeight: '700', color: '#EA4335' },
-  googleText: { fontSize: 15, fontWeight: '600', color: '#1A1A1A' },
-
   footer: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   footerText: { fontSize: 13, color: '#888' },
   footerLink: { fontSize: 13, color: '#0F9B72', fontWeight: '600' },
-
   switchRow: { marginTop: 4 },
   switchText: { fontSize: 13, color: '#888' },
 });
