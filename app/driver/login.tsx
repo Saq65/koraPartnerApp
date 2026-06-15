@@ -14,7 +14,7 @@ const GRAY_LIGHT = '#EFEFEA';
 const GRAY_TEXT = '#ABABAB';
 const TEXT_DARK = '#1A1A1A';
 
-const API_URL = 'http://192.168.1.48:5000/api';  // ← apna IP
+const API_URL = 'http://192.168.1.48:5000/api';
 
 export default function DriverLogin() {
   const [mobile, setMobile] = useState('');

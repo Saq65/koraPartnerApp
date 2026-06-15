@@ -16,18 +16,18 @@ const API_BASE  = 'http://192.168.1.48:5000/api';
 const SOCKET_URL = 'http://192.168.1.48:5000';
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  pending:                { bg: '#FFF4E5', text: '#B45309' },
-  accepted:               { bg: '#E8F7F3', text: '#0F6E56' },
-  rejected:               { bg: '#FEE2E2', text: '#DC2626' },
+  pending: { bg: '#FFF4E5', text: '#B45309' },
+  accepted: { bg: '#E8F7F3', text: '#0F6E56' },
+  rejected: { bg: '#FEE2E2', text: '#DC2626' },
   pickup_rider_requested: { bg: '#EEF2FF', text: '#4338CA' },
-  completed:              { bg: '#F0FDF4', text: '#166534' },
+  completed: { bg: '#F0FDF4', text: '#166534' },
 };
 
-type ActiveTab       = 'earnings' | 'rentals';
-type WasherStatus    = 'pending' | 'accepted' | 'rejected' | 'pickup_rider_requested' | 'completed';
+type ActiveTab = 'earnings' | 'rentals';
+type WasherStatus = 'pending' | 'accepted' | 'rejected' | 'pickup_rider_requested' | 'completed';
 type RiderAssignStatus = 'accepted' | 'rejected';
 
-interface OrderItem    { subCategoryName: string; serviceName: string; quantity: number; }
+interface OrderItem { subCategoryName: string; serviceName: string; quantity: number; }
 interface PickupAddress { _id: string; address: string; coordinates: { lat: number; lng: number }; }
 interface Order {
   _id: string;
@@ -44,13 +44,13 @@ interface Order {
 
 export default function WasherDashboard() {
   const router = useRouter();
-  const [activeTab, setActiveTab]       = useState<ActiveTab>('earnings');
-  const [orders, setOrders]             = useState<Order[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [refreshing, setRefreshing]     = useState(false);
+  const [activeTab, setActiveTab] = useState<ActiveTab>('earnings');
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [search, setSearch]             = useState('');
-  const socketRef   = useRef<Socket | null>(null);
+  const [search, setSearch] = useState('');
+  const socketRef = useRef<Socket | null>(null);
   const appStateRef = useRef(AppState.currentState);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -64,79 +64,49 @@ export default function WasherDashboard() {
     }
   };
 
- const fetchOrders = useCallback(async (isRefresh = false) => {
-  try {
-    if (isRefresh) setRefreshing(true);
+  const fetchOrders = useCallback(async (isRefresh = false) => {
+    try {
+      if (isRefresh) setRefreshing(true);
 
-    // Har baar cache load karo
-    const cached = await AsyncStorage.getItem(ORDERS_KEY);
-    const cachedOrders: Order[] = cached ? JSON.parse(cached) : [];
-
-    if (cachedOrders.length > 0) {
-      setOrders(cachedOrders);
-    }
-
-    const token = await AsyncStorage.getItem('washer_token');
-
-    const res = await axios.get(
-      `${API_BASE}/washer/orders/pending`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      if (!isRefresh) {
+        const cached = await AsyncStorage.getItem(ORDERS_KEY);
+        if (cached) setOrders(JSON.parse(cached));
       }
-    );
 
-    const fresh: Order[] = res.data.data || [];
+      const token = await AsyncStorage.getItem('washer_token');
+      const res = await axios.get(`${API_BASE}/washer/orders/pending`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const fresh: Order[] = res.data.data || [];
 
-    setOrders(prev => {
-      const base =
-        prev.length > 0
-          ? prev
-          : cachedOrders;
+      setOrders(prev => {
+        const merged = fresh.map(o => {
+          const existing = prev.find(p => p._id === o._id);
+          return existing
+            ? { ...o, washerStatus: existing.washerStatus, riderStatus: existing.riderStatus, riderName: existing.riderName }
+            : o;
+        });
 
-      const merged = fresh.map(order => {
-        const existing = base.find(
-          p => p._id === order._id
+        // Completed + pickup_rider_requested + rejected — jo fresh mein nahi aaye unhe preserve karo
+        const preserved = prev.filter(
+          p =>
+            !fresh.some(f => f._id === p._id) &&
+            ['completed', 'pickup_rider_requested', 'rejected'].includes(p.washerStatus ?? '')
         );
 
-        return existing
-          ? {
-              ...order,
-              washerStatus: existing.washerStatus,
-              riderStatus: existing.riderStatus,
-              riderName: existing.riderName,
-            }
-          : order;
+        const final = [...merged, ...preserved].sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        saveOrdersToCache(final);
+        return final;
       });
-
-      const preserved = base.filter(
-        p =>
-          !fresh.some(f => f._id === p._id) &&
-          [
-            'completed',
-            'pickup_rider_requested',
-            'rejected',
-          ].includes(p.washerStatus ?? '')
-      );
-
-      const final = [...merged, ...preserved].sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() -
-          new Date(a.createdAt).getTime()
-      );
-
-      saveOrdersToCache(final);
-
-      return final;
-    });
-  } catch (err) {
-    console.log('Fetch orders error:', err);
-  } finally {
-    setLoading(false);
-    setRefreshing(false);
-  }
-}, []);
+    } catch (err) {
+      console.log('Fetch orders error:', err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   const onRefresh = useCallback(() => fetchOrders(true), [fetchOrders]);
 
@@ -153,9 +123,10 @@ export default function WasherDashboard() {
 
   // ── Socket ─────────────────────────────────────────────────────────────────
   const setupSocket = useCallback(async () => {
-    const token      = await AsyncStorage.getItem('washer_token');
+    if (socketRef.current?.connected) return;
+    const token = await AsyncStorage.getItem('washer_token');
     const washerInfo = await AsyncStorage.getItem('washer_info');
-    const washer     = washerInfo ? JSON.parse(washerInfo) : null;
+    const washer = washerInfo ? JSON.parse(washerInfo) : null;
     if (!token) return;
 
     const socket = io(SOCKET_URL, {
@@ -221,9 +192,22 @@ export default function WasherDashboard() {
   }, [fetchOrders]);
 
   useEffect(() => {
-    fetchOrders();
-    setupSocket();
-    return () => { socketRef.current?.disconnect(); socketRef.current = null; };
+    let mounted = true;
+
+    const init = async () => {
+      await fetchOrders();
+      if (mounted) await setupSocket();
+    };
+
+    init();
+
+    return () => {
+      mounted = false;
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
   }, []);
 
   // ── Actions ────────────────────────────────────────────────────────────────
@@ -294,26 +278,26 @@ export default function WasherDashboard() {
   };
 
   // ── Derived data ───────────────────────────────────────────────────────────
-  const pendingCount   = orders.filter(o => !o.washerStatus || o.washerStatus === 'pending').length;
-  const acceptedCount  = orders.filter(o => o.washerStatus === 'accepted').length;
+  const pendingCount = orders.filter(o => !o.washerStatus || o.washerStatus === 'pending').length;
+  const acceptedCount = orders.filter(o => o.washerStatus === 'accepted').length;
   const completedCount = orders.filter(o => o.washerStatus === 'completed').length;
-  const totalRevenue   = orders
+  const totalRevenue = orders
     .filter(o => o.washerStatus === 'completed')
     .reduce((sum, o) => sum + o.totalAmount, 0);
 
   const STATS = [
-    { icon: 'time-outline',             value: String(pendingCount),   label: 'Pending'   },
-    { icon: 'checkmark-circle-outline', value: String(acceptedCount),  label: 'Accepted'  },
-    { icon: 'cash-outline',             value: `₹${totalRevenue}`,     label: 'Revenue'   },
-    { icon: 'flame-outline',            value: String(completedCount), label: 'Completed' },
+    { icon: 'time-outline', value: String(pendingCount), label: 'Pending' },
+    { icon: 'checkmark-circle-outline', value: String(acceptedCount), label: 'Accepted' },
+    { icon: 'cash-outline', value: `₹${totalRevenue}`, label: 'Revenue' },
+    { icon: 'flame-outline', value: String(completedCount), label: 'Completed' },
   ];
 
   // Search filter
   const filteredOrders = search.trim()
     ? orders.filter(o =>
-        o.orderNumber?.toLowerCase().includes(search.toLowerCase()) ||
-        o.items?.some(i => i.serviceName?.toLowerCase().includes(search.toLowerCase()))
-      )
+      o.orderNumber?.toLowerCase().includes(search.toLowerCase()) ||
+      o.items?.some(i => i.serviceName?.toLowerCase().includes(search.toLowerCase()))
+    )
     : orders;
 
   // Section 1a: Awaiting rider (no response yet)
@@ -343,10 +327,10 @@ export default function WasherDashboard() {
 
   const renderOrderCard = (order: Order) => {
     const washerStatus = order.washerStatus || 'pending';
-    const badge        = STATUS_COLORS[washerStatus] ?? STATUS_COLORS.pending;
-    const isActioning  = actionLoading === order._id;
-    const totalQty     = order.items.reduce((s, i) => s + i.quantity, 0);
-    const services     = [...new Set(order.items.map(i => i.serviceName))].join(' + ');
+    const badge = STATUS_COLORS[washerStatus] ?? STATUS_COLORS.pending;
+    const isActioning = actionLoading === order._id;
+    const totalQty = order.items.reduce((s, i) => s + i.quantity, 0);
+    const services = [...new Set(order.items.map(i => i.serviceName))].join(' + ');
 
     return (
       <View key={order._id} style={styles.orderCard}>
@@ -354,10 +338,10 @@ export default function WasherDashboard() {
           <Text style={styles.orderId}>#{order.orderNumber}</Text>
           <View style={[styles.badge, { backgroundColor: badge.bg }]}>
             <Text style={[styles.badgeText, { color: badge.text }]}>
-              {washerStatus === 'pending'   ? 'New'
-               : washerStatus === 'accepted' ? 'Accepted'
-               : washerStatus === 'completed' ? 'Completed'
-               : 'Rejected'}
+              {washerStatus === 'pending' ? 'New'
+                : washerStatus === 'accepted' ? 'Accepted'
+                  : washerStatus === 'completed' ? 'Completed'
+                    : 'Rejected'}
             </Text>
           </View>
         </View>
@@ -398,9 +382,9 @@ export default function WasherDashboard() {
             {isActioning
               ? <ActivityIndicator size="small" color="#fff" />
               : <>
-                  <Ionicons name="bicycle-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
-                  <Text style={styles.pickupText}>Request Pickup Rider</Text>
-                </>}
+                <Ionicons name="bicycle-outline" size={16} color="#fff" style={{ marginRight: 6 }} />
+                <Text style={styles.pickupText}>Request Pickup Rider</Text>
+              </>}
           </TouchableOpacity>
         )}
 
@@ -533,10 +517,25 @@ export default function WasherDashboard() {
                           <TouchableOpacity
                             style={[styles.pickupBtn, { backgroundColor: '#166534', marginTop: 8 }, actionLoading === order._id && styles.btnDisabled]}
                             disabled={actionLoading === order._id}
-                            onPress={() => {
+                            onPress={async () => {
+                              setActionLoading(order._id);
+                              try {
+                                const token = await AsyncStorage.getItem('washer_token');
+                                await axios.post(
+                                  `${API_BASE}/washer/orders/${order._id}/complete`,
+                                  {},
+                                  { headers: { Authorization: `Bearer ${token}` } }
+                                );
+                              } catch (e) {
+                                console.log('Complete error:', e);
+                              } finally {
+                                setActionLoading(null);
+                              }
                               setOrders(prev => {
                                 const updated = prev.map(o =>
-                                  o._id === order._id ? { ...o, washerStatus: 'completed' as WasherStatus } : o
+                                  o._id === order._id
+                                    ? { ...o, washerStatus: 'completed' as WasherStatus }
+                                    : o
                                 );
                                 saveOrdersToCache(updated);
                                 return updated;
@@ -583,9 +582,9 @@ export default function WasherDashboard() {
                             {isActioning
                               ? <ActivityIndicator size="small" color="#fff" />
                               : <>
-                                  <Ionicons name="refresh-outline" size={15} color="#fff" style={{ marginRight: 6 }} />
-                                  <Text style={styles.pickupText}>Re-request Rider</Text>
-                                </>}
+                                <Ionicons name="refresh-outline" size={15} color="#fff" style={{ marginRight: 6 }} />
+                                <Text style={styles.pickupText}>Re-request Rider</Text>
+                              </>}
                           </TouchableOpacity>
                         </View>
                       );
@@ -677,22 +676,22 @@ export default function WasherDashboard() {
 }
 
 const styles = StyleSheet.create({
-  safe:    { flex: 1, backgroundColor: '#F2F2F0' },
+  safe: { flex: 1, backgroundColor: '#F2F2F0' },
   content: { flex: 1 },
 
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end',
     paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16,
   },
-  headerSub:   { fontSize: 12, color: '#888', marginBottom: 2 },
+  headerSub: { fontSize: 12, color: '#888', marginBottom: 2 },
   headerTitle: { fontSize: 20, fontWeight: '700', color: '#1A1A1A' },
-  logout:      { fontSize: 13, color: '#DC2626', fontWeight: '600' },
+  logout: { fontSize: 13, color: '#DC2626', fontWeight: '600' },
 
   scrollFlex: { flex: 1 },
-  scroll:     { paddingHorizontal: 20, paddingBottom: 16 },
+  scroll: { paddingHorizontal: 20, paddingBottom: 16 },
 
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 },
-  statCard:  { flex: 1, minWidth: '45%', backgroundColor: '#FFF', borderRadius: 14, padding: 16, gap: 4 },
+  statCard: { flex: 1, minWidth: '45%', backgroundColor: '#FFF', borderRadius: 14, padding: 16, gap: 4 },
   statValue: { fontSize: 22, fontWeight: '700', color: '#1A1A1A', marginTop: 4 },
   statLabel: { fontSize: 13, color: '#888' },
 
@@ -732,13 +731,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', marginBottom: 4,
   },
-  orderId:     { fontSize: 15, fontWeight: '700', color: '#1A1A1A' },
-  badge:       { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
-  badgeText:   { fontSize: 12, fontWeight: '600' },
-  orderMeta:   { fontSize: 13, color: '#888', marginBottom: 4 },
-  orderAddr:   { fontSize: 12, color: '#888', marginBottom: 4 },
+  orderId: { fontSize: 15, fontWeight: '700', color: '#1A1A1A' },
+  badge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
+  badgeText: { fontSize: 12, fontWeight: '600' },
+  orderMeta: { fontSize: 13, color: '#888', marginBottom: 4 },
+  orderAddr: { fontSize: 12, color: '#888', marginBottom: 4 },
   orderAmount: { fontSize: 15, fontWeight: '700', color: '#1A4A4A', marginBottom: 12 },
-  riderInfo:   { fontSize: 13, color: '#0F6E56', fontWeight: '500', marginTop: 4 },
+  riderInfo: { fontSize: 13, color: '#0F6E56', fontWeight: '500', marginTop: 4 },
 
   // Action buttons
   actionRow: { flexDirection: 'row', gap: 10 },
@@ -754,10 +753,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     paddingVertical: 11, borderRadius: 10, backgroundColor: '#4338CA', marginTop: 4,
   },
-  pickupText:  { color: '#FFF', fontWeight: '600', fontSize: 14 },
+  pickupText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
   btnDisabled: { opacity: 0.5 },
-  rejectText:  { color: '#DC2626', fontWeight: '600' },
-  acceptText:  { color: '#FFF', fontWeight: '600' },
+  rejectText: { color: '#DC2626', fontWeight: '600' },
+  acceptText: { color: '#FFF', fontWeight: '600' },
 
   completedCard: {
     borderLeftWidth: 3, borderLeftColor: '#166534',
@@ -784,8 +783,8 @@ const styles = StyleSheet.create({
     gap: 8, paddingVertical: 14, borderRadius: 14,
     borderWidth: 1, borderColor: '#1A4A4A',
   },
-  bottomBtnFilled:      { backgroundColor: '#1A4A4A' },
-  bottomBtnLabel:       { fontSize: 14, fontWeight: '600', color: '#1A4A4A' },
+  bottomBtnFilled: { backgroundColor: '#1A4A4A' },
+  bottomBtnLabel: { fontSize: 14, fontWeight: '600', color: '#1A4A4A' },
   bottomBtnLabelFilled: { fontSize: 14, fontWeight: '600', color: '#FFF' },
 });
 
